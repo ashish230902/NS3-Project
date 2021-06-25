@@ -19,12 +19,6 @@
 .*
  * This is a simple example to test TCP over 802.11n (with MPDU aggregation enabled).
  *
- * Network topology:
- *
- *   Ap    STA
- *   *      *
- *   |      |
- *   n1     n2
  *
  * In this example, an HT station sends TCP packets to the access point.
  * We report the total throughput received during a window of 100ms.
