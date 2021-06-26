@@ -42,8 +42,12 @@
 #include "ns3/internet-stack-helper.h"
 #include "ns3/ipv4-address-helper.h"
 #include "ns3/ipv4-global-routing-helper.h"
+#include "ns3/simple-device-energy-model.h"
+#include "ns3/li-ion-energy-source.h"
+#include "ns3/energy-source-container.h"
+#include "ns3/simulator.h"
 
-NS_LOG_COMPONENT_DEFINE ("wifi-tcp");
+NS_LOG_COMPONENT_DEFINE ("wifi-tcp-energy");
 
 using namespace ns3;
 
@@ -60,6 +64,20 @@ CalculateThroughput ()
   Simulator::Schedule (MilliSeconds (100), &CalculateThroughput);
 }
 
+static void
+ PrintCellInfo (Ptr<LiIonEnergySource> es)
+ {
+   std::cout << "At " <<" Cell voltage: " << es->GetSupplyVoltage () << " V Remaining Capacity: " <<
+   es->GetRemainingEnergy () / (3.6 * 3600) << " Ah" << std::endl;
+ 
+   if (!Simulator::IsFinished ())
+     {
+       Simulator::Schedule (MilliSeconds (100),
+                            &PrintCellInfo,
+                            es);
+     }
+ }
+
 int
 main (int argc, char *argv[])
 {
@@ -67,7 +85,7 @@ main (int argc, char *argv[])
   std::string dataRate = "100Mbps";                  /* Application layer datarate. */
   std::string tcpVariant = "TcpNewReno";             /* TCP variant type. */
   std::string phyRate = "HtMcs7";                    /* Physical layer bitrate. */
-  double simulationTime = 5;                        /* Simulation time in seconds. */
+  double simulationTime = 3;                        /* Simulation time in seconds. */
   bool pcapTracing = true;                          /* PCAP Tracing is enabled or not. */
 
   /* Command line argument parser setup. */
@@ -180,10 +198,36 @@ main (int argc, char *argv[])
   server.SetAttribute ("DataRate", DataRateValue (DataRate (dataRate)));
   ApplicationContainer serverApp = server.Install (staWifiNode);
 
+
+  Ptr<Node> node = apWifiNode.Get(0);
+ 
+   Ptr<SimpleDeviceEnergyModel> sem = CreateObject<SimpleDeviceEnergyModel> ();
+   Ptr<EnergySourceContainer> esCont = CreateObject<EnergySourceContainer> ();
+   Ptr<LiIonEnergySource> es = CreateObject<LiIonEnergySource> ();
+   esCont->Add (es);
+   es->SetNode (node);
+   sem->SetEnergySource (es);
+   es->AppendDeviceEnergyModel (sem);
+   sem->SetNode (node);
+   node->AggregateObject (esCont);
+ 
+   Time now = Simulator::Now ();
+ 
+   // discharge at 2.33 A for 1700 seconds
+   sem->SetCurrentA (2.33);
+   now += Seconds (1701);
+ 
+
+
   /* Start Applications */
   sinkApp.Start (Seconds (0.0));
   serverApp.Start (Seconds (1.0));
   Simulator::Schedule (Seconds (1.1), &CalculateThroughput);
+  Simulator::Schedule (Seconds(1.1), &SimpleDeviceEnergyModel::SetCurrentA, sem, 4.66);
+   now += Seconds (600);
+ 
+   PrintCellInfo (es);
+ 
 
   /* Enable Traces */
   if (pcapTracing)
@@ -192,7 +236,6 @@ main (int argc, char *argv[])
       wifiPhy.EnablePcap ("AccessPoint", apDevice);
       wifiPhy.EnablePcap ("Station", staDevices);
     }
-
   /* Start Simulation */
   Simulator::Stop (Seconds (simulationTime + 1));
   Simulator::Run ();
@@ -200,6 +243,7 @@ main (int argc, char *argv[])
   double averageThroughput = ((sink->GetTotalRx () * 8) / (1e6 * simulationTime));
 
   Simulator::Destroy ();
+
 
   if (averageThroughput < 50)
     {
