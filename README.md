@@ -15,3 +15,5 @@ All the packages at The sink node 10.0.0.1 .
  position of Sources= (1,1,0)  <br /> 
  Time at which energy and voltage updates= 100 milliSec  <br /> 
  
+![0001](https://user-images.githubusercontent.com/75869438/123818255-7592e080-d916-11eb-931d-8a0374ff2eaf.jpg)
+Energy and voltage left with time <br />
