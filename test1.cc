@@ -6,11 +6,6 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation;
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
@@ -46,6 +41,7 @@
 #include "ns3/li-ion-energy-source.h"
 #include "ns3/energy-source-container.h"
 #include "ns3/simulator.h"
+#include "ns3/flow-monitor-module.h"
 
 NS_LOG_COMPONENT_DEFINE ("wifi-tcp-energy");
 
@@ -53,6 +49,8 @@ using namespace ns3;
 
 Ptr<PacketSink> sink;                         /* Pointer to the packet sink application */
 uint64_t lastTotalRx = 0;                     /* The value of the last total received bytes */
+double plo[100];
+int i=0;
 
 void
 CalculateThroughput ()
@@ -69,7 +67,7 @@ static void
  {
    std::cout << "At " <<" Cell voltage: " << es->GetSupplyVoltage () << " V Remaining Capacity: " <<
    es->GetRemainingEnergy () / (3.6 * 3600) << " Ah" << std::endl;
- 
+   
    if (!Simulator::IsFinished ())
      {
        Simulator::Schedule (MilliSeconds (100),
@@ -81,6 +79,11 @@ static void
 int
 main (int argc, char *argv[])
 {
+   
+uint32_t SentPackets = 0;
+uint32_t ReceivedPackets = 0;
+uint32_t LostPackets = 0;
+
   uint32_t payloadSize = 1472;                       /* Transport layer payload size in bytes. */
   std::string dataRate = "100Mbps";                  /* Application layer datarate. */
   std::string tcpVariant = "TcpNewReno";             /* TCP variant type. */
@@ -144,6 +147,7 @@ main (int argc, char *argv[])
   staWifiNode.Create (4);
  
 
+
   /* Configure AP */
   Ssid ssid = Ssid ("network");
   wifiMac.SetType ("ns3::ApWifiMac",
@@ -198,7 +202,7 @@ main (int argc, char *argv[])
   server.SetAttribute ("DataRate", DataRateValue (DataRate (dataRate)));
   ApplicationContainer serverApp = server.Install (staWifiNode);
 
-
+  LogComponentEnable ("LiIonEnergySource", LOG_LEVEL_INFO);
   Ptr<Node> node = apWifiNode.Get(0);
  
    Ptr<SimpleDeviceEnergyModel> sem = CreateObject<SimpleDeviceEnergyModel> ();
@@ -216,8 +220,6 @@ main (int argc, char *argv[])
    // discharge at 2.33 A for 1700 seconds
    sem->SetCurrentA (2.33);
    now += Seconds (1701);
- 
-
 
   /* Start Applications */
   sinkApp.Start (Seconds (0.0));
@@ -227,24 +229,63 @@ main (int argc, char *argv[])
    now += Seconds (600);
  
    PrintCellInfo (es);
- 
-
+   
+    FlowMonitorHelper flowmon;
+  Ptr<FlowMonitor> monitor = flowmon.InstallAll();
   /* Enable Traces */
   if (pcapTracing)
     {
       wifiPhy.SetPcapDataLinkType (WifiPhyHelper::DLT_IEEE802_11_RADIO);
       wifiPhy.EnablePcap ("AccessPoint", apDevice);
       wifiPhy.EnablePcap ("Station", staDevices);
+      
     }
   /* Start Simulation */
   Simulator::Stop (Seconds (simulationTime + 1));
   Simulator::Run ();
+ 
 
   double averageThroughput = ((sink->GetTotalRx () * 8) / (1e6 * simulationTime));
 
+
+  int j=0;
+float AvgThroughput = 0;
+Time Jitter;
+Time Delay;
+
+Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
+  std::map<FlowId, FlowMonitor::FlowStats> stats = monitor->GetFlowStats ();
+
+  for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator iter = stats.begin (); iter != stats.end (); ++iter)
+    {
+	  
+
+SentPackets = SentPackets +(iter->second.txPackets);
+ReceivedPackets = ReceivedPackets + (iter->second.rxPackets);
+LostPackets = LostPackets + (iter->second.txPackets-iter->second.rxPackets);
+AvgThroughput = AvgThroughput + (iter->second.rxBytes * 8.0/(iter->second.timeLastRxPacket.GetSeconds()-iter->second.timeFirstTxPacket.GetSeconds())/1024);
+Delay = Delay + (iter->second.delaySum);
+Jitter = Jitter + (iter->second.jitterSum);
+
+j = j + 1;
+
+}
+
+AvgThroughput = AvgThroughput/j;
+NS_LOG_UNCOND("--------Total Results of the simulation----------"<<std::endl);
+NS_LOG_UNCOND("Total sent packets  =" << SentPackets);
+NS_LOG_UNCOND("Total Received Packets =" << ReceivedPackets);
+NS_LOG_UNCOND("Total Lost Packets =" << LostPackets);
+NS_LOG_UNCOND("Packet Loss ratio =" << ((LostPackets*100)/SentPackets)<< "%");
+NS_LOG_UNCOND("Packet delivery ratio =" << ((ReceivedPackets*100)/SentPackets)<< "%");
+NS_LOG_UNCOND("Average Throughput =" << AvgThroughput<< "Kbps");
+NS_LOG_UNCOND("End to End Delay =" << Delay);
+NS_LOG_UNCOND("End to End Jitter delay =" << Jitter);
+NS_LOG_UNCOND("Total Flod id " << j);
+  monitor->SerializeToXmlFile("manet-routing.xml", true, true);
   Simulator::Destroy ();
 
-
+  /*printf("%f", server->GetTotalTx(0));*/
   if (averageThroughput < 50)
     {
       NS_LOG_ERROR ("Obtained throughput is not in the expected boundaries!");
@@ -252,4 +293,5 @@ main (int argc, char *argv[])
     }
   std::cout << "\nAverage throughput: " << averageThroughput << " Mbit/s" << std::endl;
   return 0;
+
 }
