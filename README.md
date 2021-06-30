@@ -17,3 +17,15 @@ All the packages at The sink node 10.0.0.1 .
  
 ![0001](https://user-images.githubusercontent.com/75869438/123818255-7592e080-d916-11eb-931d-8a0374ff2eaf.jpg)
 Energy and voltage left with time <br />
+<br /><br />
+--------Total Results of the simulation----------<br /> 
+<br /> 
+Total sent packets  =17091<br /> 
+Total Received Packets =16820<br /> 
+Total Lost Packets =271<br /> 
+Packet Loss ratio =1%<br /> 
+Packet delivery ratio =98%<br /> 
+Average Throughput =5709.5Kbps<br /> 
+End to End Delay =+7.63709e+11ns<br /> 
+End to End Jitter delay =+2.62609e+10ns<br /> 
+
